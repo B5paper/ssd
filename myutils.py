@@ -53,6 +53,29 @@ def to_tensor(img):
     return mx.nd.array(img).transpose(axes=(2, 0, 1))
 
 
+def prepare_datum_for_training(img, label):
+    """
+    :func: image transform includes resizing, color normalizing, to tensor, expanding dimension
+    label transform includes converting to relative coords, expanding dimension
+
+    :param img: np.array, uint8, (h, w, c)
+    :param label: np.array, uint8, (N, 5)
+    :return:
+    """
+    mx_img = img.astype('float32')
+    mx_label = label.astype('float32')
+
+    mx_img, _ = resize_img_and_label(mx_img, mx_label, size=300)
+    mx_img = mx.img.color_normalize(mx.nd.array(mx_img), mean=mx.nd.array(mean), std=mx.nd.array(std))
+    mx_img = to_tensor(mx_img)
+    mx_img = mx_img.expand_dims(axis=0)
+
+    mx_label[:, 1:] = bbox_abs_to_rel(mx_label[:, 1:], img.shape[:2])
+    mx_label = mx.nd.array(mx_label)
+    mx_label = mx_label.expand_dims(axis=0)
+
+    return mx_img, mx_label
+
 # data visualization
 
 def _add_rectangle(axes, relative_bbox, color='red'):
@@ -105,7 +128,8 @@ def target_visualize(img, label, anchors, cls_preds):
     box_target, box_mask, cls_target = mx.nd.contrib.MultiBoxTarget(anchor=mx.nd.array(anchors),
                                                                     cls_pred=mx.nd.array(cls_preds).transpose(
                                                                         (0, 2, 1)),
-                                                                    label=mx.nd.array(mx_label))
+                                                                    label=mx.nd.array(mx_label),
+                                                                    overlap_threshold=0.25)
     idx = cls_target.asnumpy().astype('int8').flatten()
     targ = anchors.asnumpy()[0, idx > 0.9]  # idx == 1
 
@@ -135,7 +159,7 @@ def anchor_visualize(img, anchors, i):
         return
     bboxes = anchors[0, i*5:i*5+5, :]
     bboxes = bbox_rel_to_abs(bbox=bboxes.asnumpy(), pic_size=img.shape[:2])
-    data_visualize(img, bboxes.asnumpy())
+    data_visualize(img, bboxes)
     return
 
 
@@ -156,12 +180,12 @@ def bbox_rel_to_abs(bbox, pic_size):
 def bbox_abs_to_rel(bbox, pic_size: object):
     """
     :function: Transform absolute bbox coordinates to relative coordinates.
-    :param bbox: numpy.adarray, (b, N, 5)
+    :param bbox: numpy.adarray, uint8, (N, 4)
     :param pic_size: numpy.ndarray, (height, width)
     :return: relative coordiantes of bbox
     """
     height, width = pic_size
-    rel_bbox = bbox / np.array([width, height] * 2)
+    rel_bbox = bbox.astype('float32') / np.array([width, height] * 2)
     return rel_bbox
 
 
@@ -184,43 +208,6 @@ transformer = mx.gluon.data.vision.transforms.Normalize(mean=(0.485, 0.456, 0.40
 # transformer = mx.gluon.data.vision.transforms.Compose([
 #     mx.gluon.data.vision.transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 # ])
-
-
-# bachify
-
-def bachify (batch_size, data_iter, transformer):
-    """
-    :function: Bachify
-    :param batch_size: int
-    :param data_iter:
-    :param transformer: this transformer has no Resize module
-    :return:
-    """
-    import mxnet as mx
-    img_batch = mx.nd.empty(shape=(1, 3, 300, 300))
-    label_batch = mx.nd.empty(shape=(1, 1, 5))
-    while (True):
-        try:
-            batch = next(data_iter)
-        except StopIteration:
-            data_iter.reset()
-            continue
-
-        img, label = batch
-        img, label = resize_img_and_label(img, label, (300, 300))
-        img = to_tensor(img)
-        label = mx.nd.array(label)
-        img = transformer(img)
-
-        img_batch = mx.nd.concat(img_batch, img.expand_dims(axis=0), dim=0)
-        label_batch = mx.nd.concat(label_batch, label.expand_dims(axis=0), dim=0)
-
-        if len(img_batch) - 1 == batch_size:
-            rtl_img_batch = img_batch[1:]
-            rtl_label_batch = label_batch[1:]
-            img_batch = img_batch[0:1]
-            label_batch = label_batch[0:1]
-            yield (rtl_img_batch, rtl_label_batch)
 
 
 # validation
