@@ -7,14 +7,6 @@ std = (0.229, 0.224, 0.225)
 
 # data processing
 
-def get_data_n(data_iter, n):
-    data_iter.reset()
-    for i in range(n-1):
-        next(data_iter)
-    img, label = next(data_iter)
-    return img, label
-
-
 def resize_img_and_label (img, label, size=300):
     """
     :function: resize the img and label to (300, 300), and transform the dtype from int8 to float32
@@ -87,14 +79,14 @@ def _add_rectangle(axes, relative_bbox, color='red'):
 def data_visualize(img, bboxes):
     """
     :param img: numpy.ndarray, (h, w, c)
-    :param bboxes: absolute position, numpy.ndarray, (N, 5), (x_left_top, y_left_top, x_right_bottom, y_right_bottom)
+    :param bboxes: absolute position, numpy.ndarray, (N, 4), (x_left_top, y_left_top, x_right_bottom, y_right_bottom)
     :return:
     """
     fig = plt.imshow(img)
     axes = fig.axes
 
     for bbox in bboxes:
-        rel_bbox = bbox_abs_to_rel(bbox[1:], img.shape[:2])
+        rel_bbox = bbox_abs_to_rel(bbox, img.shape[:2])
         _add_rectangle(axes, rel_bbox)
 
     plt.show()
@@ -143,8 +135,7 @@ def anchor_visualize(img, anchors, i):
         return
     bboxes = anchors[0, i*5:i*5+5, :]
     bboxes = bbox_rel_to_abs(bbox=bboxes.asnumpy(), pic_size=img.shape[:2])
-    temp_label = mx.nd.concat(mx.nd.array([1] * 5).reshape((5, 1)), mx.nd.array(bboxes), dim=1)
-    data_visualize(img, temp_label.asnumpy())
+    data_visualize(img, bboxes.asnumpy())
     return
 
 
@@ -261,6 +252,7 @@ def validate(img, label, net, the_first_n_bboxes=3, std=(0.229, 0.224, 0.225),
     mx_img = mx.img.color_normalize(mx_img, mean=mean, std=std)
     mx_img = to_tensor(mx_img)
     mx_img = mx_img.expand_dims(axis=0)
+    mx_img = mx_img.as_in_context(net.ctx)
 
     anchors, cls_preds, bbox_preds = net(mx_img)
 
@@ -278,12 +270,12 @@ def validate(img, label, net, the_first_n_bboxes=3, std=(0.229, 0.224, 0.225),
     plt.show()
 
 
-def validate_data_n (n, data_iter, net, the_first_n_bboxes=3):
+def validate_data_n (n, dataset, net, the_first_n_bboxes=3):
     """
     reset data_iter, and validate the n-th data. The index of data starts from 1.
     :param n:
     :param the_first_N_bboxes:
     :return:
     """
-    img, label = get_data_n(data_iter, n)
+    img, label = dataset[n]
     validate(img, label, net, the_first_n_bboxes)
