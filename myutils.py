@@ -53,7 +53,7 @@ def to_tensor(img):
     return mx.nd.array(img).transpose(axes=(2, 0, 1))
 
 
-def prepare_datum_for_training(img, label):
+def prepare_datum_for_net(img, label):
     """
     :func: image transform includes resizing, color normalizing, to tensor, expanding dimension
     label transform includes converting to relative coords, expanding dimension
@@ -62,7 +62,7 @@ def prepare_datum_for_training(img, label):
     :param label: np.array, uint8, (N, 5)
     :return:
     """
-    mx_img = img.astype('float32')
+    mx_img = img.astype('float32')  # deepcopy
     mx_label = label.astype('float32')
 
     mx_img, _ = resize_img_and_label(mx_img, mx_label, size=300)
@@ -208,6 +208,37 @@ transformer = mx.gluon.data.vision.transforms.Normalize(mean=(0.485, 0.456, 0.40
 # transformer = mx.gluon.data.vision.transforms.Compose([
 #     mx.gluon.data.vision.transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 # ])
+
+
+def transform_fn(*data):
+    """
+    almost the same with prepare_datum_for_net, and this function is for batchify.
+
+    :param data: (img, label)
+    :return: (img, label)
+    """
+    import copy
+    img, label = copy.deepcopy(data)
+    img_size = img.shape[:2]
+    img = img.astype('float32')  # deepcopy
+    label = label.astype('float32')
+
+    img, _ = resize_img_and_label(img, label, size=300)
+    img = mx.img.color_normalize(mx.nd.array(img), mean=mx.nd.array(mean), std=mx.nd.array(std))
+    img = to_tensor(img)
+
+    label[:, 1:] = bbox_abs_to_rel(label[:, 1:], img_size)
+    label = mx.nd.array(label)
+
+    return img, label
+
+
+
+
+
+
+
+
 
 
 # validation
