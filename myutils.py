@@ -233,14 +233,6 @@ def transform_fn(*data):
     return img, label
 
 
-
-
-
-
-
-
-
-
 # validation
 
 def validate(img, label, net, the_first_n_bboxes=3, std=(0.229, 0.224, 0.225),
@@ -295,5 +287,6 @@ def validate_data_n (n, dataset, net, the_first_n_bboxes=3):
     :param the_first_N_bboxes:
     :return:
     """
+
     img, label = dataset[n]
     validate(img, label, net, the_first_n_bboxes)
